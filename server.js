@@ -1,7 +1,5 @@
 const express = require("express");
 const cors = require("cors");
-
-// 🔥 yt-dlp ka exact path
 const ytdlp = require("yt-dlp-exec");
 
 const app = express();
@@ -10,12 +8,12 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 8000;
 
-// ✅ Home route
+// ✅ Home
 app.get("/", (req, res) => {
     res.send("YT-DLP API Running 🚀");
 });
 
-// 🔍 Video info
+// 🔍 Video Info
 app.get("/info", async (req, res) => {
     const url = req.query.url;
 
@@ -27,6 +25,13 @@ app.get("/info", async (req, res) => {
         const info = await ytdlp(url, {
             dumpSingleJson: true,
             noWarnings: true,
+
+            // 🔥 FIXES
+            noCheckCertificates: true,
+            userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+
+            // ❗ IMPORTANT (impersonation disable)
+            extractorArgs: "generic:impersonate=false"
         });
 
         res.json({
@@ -52,7 +57,7 @@ app.get("/info", async (req, res) => {
     }
 });
 
-// ⬇️ Download link
+// ⬇️ Download
 app.get("/download", async (req, res) => {
     const { url, format } = req.query;
 
@@ -63,7 +68,12 @@ app.get("/download", async (req, res) => {
     try {
         const videoUrl = await ytdlp(url, {
             getUrl: true,
-            format: format || "best"
+            format: format || "best",
+
+            // same fixes
+            noCheckCertificates: true,
+            userAgent: "Mozilla/5.0",
+            extractorArgs: "generic:impersonate=false"
         });
 
         res.json({
@@ -79,7 +89,7 @@ app.get("/download", async (req, res) => {
     }
 });
 
-// 🔥 IMPORTANT (Koyeb ke liye)
+// 🔥 Koyeb fix
 app.listen(PORT, "0.0.0.0", () => {
     console.log(`🔥 Server running on port ${PORT}`);
 });

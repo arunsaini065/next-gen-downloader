@@ -1,12 +1,10 @@
 FROM node:18
 
-# Python install
+# Python + yt-dlp
 RUN apt-get update && apt-get install -y python3 python3-pip
-
-# 🔥 yt-dlp install with global path fix
 RUN pip3 install --no-cache-dir yt-dlp
 
-# 🔥 PATH fix (VERY IMPORTANT)
+# PATH fix
 ENV PATH="/root/.local/bin:${PATH}"
 
 # Debug
