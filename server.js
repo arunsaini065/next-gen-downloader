@@ -27,7 +27,7 @@ app.get("/info", (req, res) => {
 
     if (!url) return res.status(400).json({ error: "URL required" });
 
-    const cmd = `${YTDLP} "${url}" --dump-single-json --no-warnings --no-check-certificates --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" --cookies-from-browser chrome --extractor-args "dailymotion:impersonate=false"`;
+    const cmd = `${YTDLP} "${url}" --dump-single-json --no-warnings --no-check-certificates --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" --add-header "accept-language:en-US,en;q=0.9" --add-header "referer:https://www.instagram.com/" --extractor-args "instagram:api_version=v1;dailymotion:impersonate=false"`;
 
     exec(cmd, { maxBuffer: 1024 * 5000 }, (err, stdout, stderr) => {
         if (err) {
@@ -60,7 +60,7 @@ app.get("/download", (req, res) => {
 
     if (!url) return res.status(400).json({ error: "URL required" });
 
-    const cmd = `${YTDLP} "${url}" -f ${format || "best"} -g --no-warnings --no-check-certificates --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" --cookies-from-browser chrome --extractor-args "dailymotion:impersonate=false"`;
+    const cmd = `${YTDLP} "${url}" -f ${format || "best"} -g --no-warnings --no-check-certificates --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" --add-header "accept-language:en-US,en;q=0.9" --add-header "referer:https://www.instagram.com/" --extractor-args "instagram:api_version=v1;dailymotion:impersonate=false"`;
 
     exec(cmd, (err, stdout, stderr) => {
         if (err) {
