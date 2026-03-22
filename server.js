@@ -11,12 +11,21 @@ app.use(express.json());
 const PORT = process.env.PORT || 8000;
 const YTDLP = process.env.YTDLP_PATH || "yt-dlp";
 
-// 🔥 Modern Headers & User-Agent to mimic a real browser
-const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
+// 🔥 Environment variable for Proxy (e.g., http://user:pass@host:port)
+const PROXY = process.env.PROXY_URL || null;
+
+// 🔥 Advanced Human-like User-Agent
+const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36";
 
 const runYtDlp = (args) => {
+    // Add proxy to args if configured in environment
+    if (PROXY) {
+        args.push("--proxy", PROXY);
+    }
+
     return new Promise((resolve, reject) => {
-        execFile(YTDLP, args, { maxBuffer: 1024 * 1024 * 10 }, (err, stdout, stderr) => {
+        // High maxBuffer (50MB) for large metadata
+        execFile(YTDLP, args, { maxBuffer: 1024 * 1024 * 50 }, (err, stdout, stderr) => {
             if (err) return reject(stderr || err.message);
             resolve(stdout);
         });
@@ -24,7 +33,7 @@ const runYtDlp = (args) => {
 };
 
 app.get("/", (req, res) => {
-    res.send("🚀 Next-Gen Downloader API is Running");
+    res.send("🚀 Universal Optimized Downloader API is Running");
 });
 
 // INFO API
@@ -39,13 +48,15 @@ app.get("/info", async (req, res) => {
             "--no-warnings",
             "--no-check-certificates",
             "--no-playlist",
+            "--geo-bypass", // Helps bypass regional blocks
             "--user-agent", USER_AGENT,
-            "--impersonate", "chrome", // 🕵️ Critical: Mimics Chrome browser behavior
+            "--impersonate", "chrome", // 🕵️ Critical: Bypasses many bot detectors
             "--add-header", "Accept-Language: en-US,en;q=0.9",
-            "--add-header", "Referer: https://www.google.com/"
+            "--add-header", "Sec-Fetch-Mode: navigate",
+            "--extractor-args", "instagram:allow_direct_url"
         ];
 
-        // 🍪 Cookies: Check if cookies.txt exists in the app directory
+        // 🍪 Cookies: Optional (Uses if file exists, but tries to work without it)
         const cookiesPath = path.join(__dirname, "cookies.txt");
         if (fs.existsSync(cookiesPath)) {
             args.push("--cookies", cookiesPath);
@@ -74,33 +85,37 @@ app.get("/info", async (req, res) => {
         });
 
     } catch (err) {
-        console.error("❌ Info fetch failed:", err);
+        console.error("❌ Fetch failed:", err);
 
-        // Fallback: Just try to get a direct URL if full info fails
+        // FALLBACK: Fast URL extraction
         try {
             const fallbackArgs = [
                 url, "-g",
                 "--no-warnings",
                 "--user-agent", USER_AGENT,
-                "--impersonate", "chrome"
+                "--impersonate", "chrome",
+                "--geo-bypass"
             ];
 
             const cookiesPath = path.join(__dirname, "cookies.txt");
-            if (fs.existsSync(cookiesPath)) {
-                fallbackArgs.push("--cookies", cookiesPath);
-            }
+            if (fs.existsSync(cookiesPath)) fallbackArgs.push("--cookies", cookiesPath);
 
             let link = await runYtDlp(fallbackArgs);
+            const links = link.trim().split('\n');
+
             return res.json({
+                success: true,
                 fallback: true,
                 title: "Media Found",
-                download_url: link.trim().split('\n')[0]
+                download_url: links[0],
+                audio_url: links.length > 1 ? links[1] : null
             });
 
         } catch (err2) {
             return res.status(500).json({
-                error: "Instagram is blocking the request",
-                details: "Public content is often restricted on server IPs. Please provide a cookies.txt file."
+                error: "Request Blocked by Site",
+                details: "Try again in a few minutes. Some sites like Instagram strictly block server IPs without cookies.",
+                debug: err.toString().split('\n')[0]
             });
         }
     }
@@ -112,22 +127,15 @@ app.get("/download", async (req, res) => {
     if (!url) return res.status(400).json({ error: "URL required" });
 
     try {
-        const args = [
-            url, "-g",
-            "--no-warnings",
-            "--user-agent", USER_AGENT,
-            "--impersonate", "chrome"
-        ];
-
+        const args = [url, "-g", "--no-warnings", "--user-agent", USER_AGENT, "--impersonate", "chrome"];
         if (format) args.push("-f", format);
 
         const cookiesPath = path.join(__dirname, "cookies.txt");
-        if (fs.existsSync(cookiesPath)) {
-            args.push("--cookies", cookiesPath);
-        }
+        if (fs.existsSync(cookiesPath)) args.push("--cookies", cookiesPath);
 
         const output = await runYtDlp(args);
-        res.json({ download_url: output.trim().split('\n')[0] });
+        const links = output.trim().split('\n');
+        res.json({ download_url: links[0] });
 
     } catch (err) {
         res.status(500).json({
@@ -138,5 +146,5 @@ app.get("/download", async (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`🔥 Server running on port ${PORT}`);
+    console.log(`🔥 Optimized Server running on port ${PORT}`);
 });
