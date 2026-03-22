@@ -1,6 +1,6 @@
 const express = require("express");
 const cors = require("cors");
-const ytdlp = require("yt-dlp-exec");
+const { exec } = require("child_process");
 
 const app = express();
 app.use(cors());
@@ -8,38 +8,38 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 8000;
 
-// ✅ Home
+// Home
 app.get("/", (req, res) => {
     res.send("YT-DLP API Running 🚀");
 });
 
-// 🔍 Video Info
-app.get("/info", async (req, res) => {
+// INFO API
+app.get("/info", (req, res) => {
     const url = req.query.url;
 
     if (!url) {
         return res.status(400).json({ error: "URL required" });
     }
 
-    try {
-        const info = await ytdlp(url, {
-            dumpSingleJson: true,
-            noWarnings: true,
+    const command = `yt-dlp -j "${url}"`;
 
-            // 🔥 FIXES
-            noCheckCertificates: true,
-            userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+    exec(command, (error, stdout, stderr) => {
+        if (error) {
+            console.log(stderr);
+            return res.status(500).json({
+                error: "Failed to fetch info",
+                details: stderr
+            });
+        }
 
-            // ❗ IMPORTANT (impersonation disable)
-            extractorArgs: "generic:impersonate=false"
-        });
+        const data = JSON.parse(stdout);
 
         res.json({
-            title: info.title,
-            duration: info.duration,
-            thumbnail: info.thumbnail,
-            uploader: info.uploader,
-            formats: info.formats
+            title: data.title,
+            duration: data.duration,
+            thumbnail: data.thumbnail,
+            uploader: data.uploader,
+            formats: data.formats
                 ?.filter(f => f.ext === "mp4")
                 .map(f => ({
                     format_id: f.format_id,
@@ -47,49 +47,34 @@ app.get("/info", async (req, res) => {
                     url: f.url
                 }))
         });
-
-    } catch (err) {
-        console.log(err);
-        res.status(500).json({
-            error: "Failed to fetch info",
-            details: err.message
-        });
-    }
+    });
 });
 
-// ⬇️ Download
-app.get("/download", async (req, res) => {
+// DOWNLOAD API
+app.get("/download", (req, res) => {
     const { url, format } = req.query;
 
     if (!url) {
         return res.status(400).json({ error: "URL required" });
     }
 
-    try {
-        const videoUrl = await ytdlp(url, {
-            getUrl: true,
-            format: format || "best",
+    const command = `yt-dlp -f "${format || "best"}" -g "${url}"`;
 
-            // same fixes
-            noCheckCertificates: true,
-            userAgent: "Mozilla/5.0",
-            extractorArgs: "generic:impersonate=false"
-        });
+    exec(command, (error, stdout, stderr) => {
+        if (error) {
+            console.log(stderr);
+            return res.status(500).json({
+                error: "Download failed",
+                details: stderr
+            });
+        }
 
         res.json({
-            download_url: videoUrl
+            download_url: stdout.trim()
         });
-
-    } catch (err) {
-        console.log(err);
-        res.status(500).json({
-            error: "Download failed",
-            details: err.message
-        });
-    }
+    });
 });
 
-// 🔥 Koyeb fix
-app.listen(PORT, "0.0.0.0", () => {
+app.listen(PORT, () => {
     console.log(`🔥 Server running on port ${PORT}`);
 });
