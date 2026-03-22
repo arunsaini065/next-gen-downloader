@@ -27,7 +27,7 @@ app.get("/info", (req, res) => {
 
     if (!url) return res.status(400).json({ error: "URL required" });
 
-    const cmd = `${YTDLP} -j "${url}" --no-warnings --no-check-certificates --extractor-args "generic:impersonate=false"`;
+    const cmd = `${YTDLP} "${url}" --dump-single-json --no-warnings --no-check-certificates --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" --extractor-args "dailymotion:impersonate=false"`;
 
     exec(cmd, { maxBuffer: 1024 * 5000 }, (err, stdout, stderr) => {
         if (err) {
@@ -60,7 +60,7 @@ app.get("/download", (req, res) => {
 
     if (!url) return res.status(400).json({ error: "URL required" });
 
-    const cmd = `${YTDLP} -f "${format || "best"}" -g "${url}" --no-warnings --no-check-certificates --extractor-args "generic:impersonate=false"`;
+    const cmd = `${YTDLP} "${url}" -f ${format || "best"} -g --no-warnings --no-check-certificates --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" --extractor-args "dailymotion:impersonate=false"`;
 
     exec(cmd, (err, stdout, stderr) => {
         if (err) {
