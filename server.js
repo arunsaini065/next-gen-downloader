@@ -27,7 +27,7 @@ app.get("/info", (req, res) => {
 
     if (!url) return res.status(400).json({ error: "URL required" });
 
-    const cmd = `${YTDLP} -j "${url}" --no-warnings`;
+    const cmd = `${YTDLP} -j "${url}" --no-warnings --no-check-certificates --extractor-args "generic:impersonate=false"`;
 
     exec(cmd, { maxBuffer: 1024 * 5000 }, (err, stdout, stderr) => {
         if (err) {
@@ -60,7 +60,7 @@ app.get("/download", (req, res) => {
 
     if (!url) return res.status(400).json({ error: "URL required" });
 
-    const cmd = `${YTDLP} -f "${format || "best"}" -g "${url}"`;
+    const cmd = `${YTDLP} -f "${format || "best"}" -g "${url}" --no-warnings --no-check-certificates --extractor-args "generic:impersonate=false"`;
 
     exec(cmd, (err, stdout, stderr) => {
         if (err) {
