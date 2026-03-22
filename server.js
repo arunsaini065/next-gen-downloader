@@ -1,8 +1,9 @@
 const express = require("express");
 const cors = require("cors");
 
-// ✅ system yt-dlp use karega (IMPORTANT)
-const ytdlp = require("yt-dlp-exec").create("yt-dlp");
+// 🔥 yt-dlp ka exact path
+const ytdlp = require("yt-dlp-exec");
+
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -14,7 +15,7 @@ app.get("/", (req, res) => {
     res.send("YT-DLP API Running 🚀");
 });
 
-// 🔍 Video Info API
+// 🔍 Video info
 app.get("/info", async (req, res) => {
     const url = req.query.url;
 
@@ -34,17 +35,16 @@ app.get("/info", async (req, res) => {
             thumbnail: info.thumbnail,
             uploader: info.uploader,
             formats: info.formats
-                ?.filter(f => f.ext === "mp4" && f.url)
+                ?.filter(f => f.ext === "mp4")
                 .map(f => ({
                     format_id: f.format_id,
-                    quality: f.format_note || f.height + "p",
+                    quality: f.format_note,
                     url: f.url
                 }))
         });
 
     } catch (err) {
-        console.log("INFO ERROR:", err);
-
+        console.log(err);
         res.status(500).json({
             error: "Failed to fetch info",
             details: err.message
@@ -52,7 +52,7 @@ app.get("/info", async (req, res) => {
     }
 });
 
-// ⬇️ Download API
+// ⬇️ Download link
 app.get("/download", async (req, res) => {
     const { url, format } = req.query;
 
@@ -71,8 +71,7 @@ app.get("/download", async (req, res) => {
         });
 
     } catch (err) {
-        console.log("DOWNLOAD ERROR:", err);
-
+        console.log(err);
         res.status(500).json({
             error: "Download failed",
             details: err.message
@@ -80,7 +79,7 @@ app.get("/download", async (req, res) => {
     }
 });
 
-// 🚀 Server start
-app.listen(PORT, () => {
-    console.log(`🔥 Server running at http://localhost:${PORT}`);
+// 🔥 IMPORTANT (Koyeb ke liye)
+app.listen(PORT, "0.0.0.0", () => {
+    console.log(`🔥 Server running on port ${PORT}`);
 });
