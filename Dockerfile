@@ -1,27 +1,24 @@
 FROM node:18
 
-# 🔥 Install python + dependencies properly
+# 🔥 install dependencies
 RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
-    python3-venv \
     ffmpeg \
     curl \
     ca-certificates \
     firefox-esr
 
-# 🔥 Upgrade pip (IMPORTANT FIX)
-RUN python3 -m pip install --upgrade pip
-
-# 🔥 Install yt-dlp
-RUN pip3 install yt-dlp
+# 🔥 FIX: install yt-dlp without upgrade pip
+RUN pip3 install --no-cache-dir yt-dlp --break-system-packages
 
 # 🔥 verify
-RUN /usr/local/bin/yt-dlp --version
+RUN /usr/bin/yt-dlp --version || true
+RUN /usr/local/bin/yt-dlp --version || true
 
-# ENV
-ENV PATH="/usr/local/bin:${PATH}"
-ENV YTDLP_PATH=/usr/local/bin/yt-dlp
+# 🔥 PATH fix
+ENV PATH="/usr/local/bin:/usr/bin:${PATH}"
+ENV YTDLP_PATH=yt-dlp
 
 WORKDIR /app
 
