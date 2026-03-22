@@ -5,10 +5,12 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     ffmpeg \
     curl \
-    ca-certificates
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
-# 🔥 stable yt-dlp version (VERY IMPORTANT)
-RUN pip3 install yt-dlp==2024.12.23
+# 🔥 Fix: Use --break-system-packages for modern Debian/Ubuntu
+# Also updated to latest yt-dlp to avoid extraction errors
+RUN pip3 install --no-cache-dir -U yt-dlp --break-system-packages
 
 ENV PATH="/usr/local/bin:/usr/bin:${PATH}"
 
