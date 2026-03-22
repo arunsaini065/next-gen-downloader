@@ -8,6 +8,14 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 8000;
 
+// 🔥 FIXED PATH
+const YTDLP = process.env.YTDLP_PATH || "yt-dlp";
+
+// Debug (remove later)
+exec(`which yt-dlp`, (e, out) => {
+    console.log("YT-DLP PATH:", out);
+});
+
 // Home
 app.get("/", (req, res) => {
     res.send("YT-DLP API Running 🚀");
@@ -21,10 +29,10 @@ app.get("/info", (req, res) => {
         return res.status(400).json({ error: "URL required" });
     }
 
-    const command = `yt-dlp -j "${url}"`;
+    const cmd = `${YTDLP} -j "${url}" --no-warnings --no-check-certificates`;
 
-    exec(command, (error, stdout, stderr) => {
-        if (error) {
+    exec(cmd, { maxBuffer: 1024 * 5000 }, (err, stdout, stderr) => {
+        if (err) {
             console.log(stderr);
             return res.status(500).json({
                 error: "Failed to fetch info",
@@ -32,21 +40,26 @@ app.get("/info", (req, res) => {
             });
         }
 
-        const data = JSON.parse(stdout);
+        try {
+            const data = JSON.parse(stdout);
 
-        res.json({
-            title: data.title,
-            duration: data.duration,
-            thumbnail: data.thumbnail,
-            uploader: data.uploader,
-            formats: data.formats
-                ?.filter(f => f.ext === "mp4")
-                .map(f => ({
-                    format_id: f.format_id,
-                    quality: f.format_note,
-                    url: f.url
-                }))
-        });
+            res.json({
+                title: data.title,
+                duration: data.duration,
+                thumbnail: data.thumbnail,
+                uploader: data.uploader,
+                formats: data.formats
+                    ?.filter(f => f.ext === "mp4")
+                    .map(f => ({
+                        format_id: f.format_id,
+                        quality: f.format_note,
+                        url: f.url
+                    }))
+            });
+
+        } catch (e) {
+            res.status(500).json({ error: "Parsing failed" });
+        }
     });
 });
 
@@ -58,10 +71,10 @@ app.get("/download", (req, res) => {
         return res.status(400).json({ error: "URL required" });
     }
 
-    const command = `yt-dlp -f "${format || "best"}" -g "${url}"`;
+    const cmd = `${YTDLP} -f "${format || "best"}" -g "${url}"`;
 
-    exec(command, (error, stdout, stderr) => {
-        if (error) {
+    exec(cmd, (err, stdout, stderr) => {
+        if (err) {
             console.log(stderr);
             return res.status(500).json({
                 error: "Download failed",

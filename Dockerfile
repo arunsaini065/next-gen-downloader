@@ -1,6 +1,5 @@
 FROM node:18
 
-# ✅ Python + yt-dlp + ffmpeg + browser deps
 RUN apt-get update && apt-get install -y \
     python3 python3-pip \
     ffmpeg \
@@ -8,14 +7,10 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     firefox-esr
 
-# ✅ yt-dlp install (global)
 RUN pip3 install --no-cache-dir yt-dlp
 
-# ✅ IMPORTANT: ensure binary accessible
-RUN ln -s /usr/local/bin/yt-dlp /usr/bin/yt-dlp
-
-# Debug (optional)
-RUN yt-dlp --version
+# 🔥 verify
+RUN /usr/local/bin/yt-dlp --version
 
 WORKDIR /app
 
@@ -25,6 +20,8 @@ RUN npm install
 COPY . .
 
 ENV PORT=8000
+ENV YTDLP_PATH=/usr/local/bin/yt-dlp
+
 EXPOSE 8000
 
 CMD ["node", "server.js"]
