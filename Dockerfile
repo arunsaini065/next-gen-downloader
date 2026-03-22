@@ -5,12 +5,10 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     ffmpeg \
     curl \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+    ca-certificates
 
-# 🔥 Install LATEST yt-dlp (Essential for Instagram/YouTube fixes)
-RUN python3 -m pip install --upgrade pip --break-system-packages
-RUN pip3 install --no-cache-dir -U yt-dlp --break-system-packages
+# 🔥 stable yt-dlp version (VERY IMPORTANT)
+RUN pip3 install yt-dlp==2024.12.23
 
 ENV PATH="/usr/local/bin:/usr/bin:${PATH}"
 
