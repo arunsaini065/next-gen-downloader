@@ -1,7 +1,7 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const { spawn, exec } = require('child_process');
+const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs-extra');
 const cors = require('cors');
@@ -21,9 +21,168 @@ app.set('socketio', io);
 
 const PORT = process.env.PORT || 8000;
 const downloadsDir = path.join(__dirname, 'downloads');
+const DEFAULT_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36';
 
 // Ensure downloads directory exists
 fs.ensureDirSync(downloadsDir);
+
+function buildInfoArgs(url) {
+  const args = [
+    url,
+    '--dump-single-json',
+    '--no-warnings',
+    '--no-check-certificates',
+    '--user-agent', DEFAULT_USER_AGENT,
+    '--add-header', 'accept-language:en-US,en;q=0.9'
+  ];
+
+  try {
+    const { hostname } = new URL(url);
+    if (hostname.includes('instagram.com')) {
+      args.push('--add-header', 'referer:https://www.instagram.com/');
+      args.push('--extractor-args', 'instagram:api_version=v1;dailymotion:impersonate=false');
+    }
+  } catch (error) {
+    // URL validation happens before this helper is called.
+  }
+
+  return args;
+}
+
+function isManifestFormat(format = {}) {
+  const formatId = String(format.format_id || '').toLowerCase();
+  const ext = String(format.ext || '').toLowerCase();
+  const protocol = String(format.protocol || '').toLowerCase();
+
+  return (
+    formatId.startsWith('hls') ||
+    formatId.startsWith('dash') ||
+    ext === 'm3u8' ||
+    ext === 'mpd' ||
+    protocol.includes('m3u8') ||
+    protocol.includes('dash') ||
+    protocol.includes('http_dash_segments')
+  );
+}
+
+function hasVideo(format = {}) {
+  if (typeof format.vcodec === 'string') {
+    return format.vcodec !== 'none';
+  }
+
+  return Boolean(format.video_ext && format.video_ext !== 'none');
+}
+
+function hasAudio(format = {}) {
+  if (typeof format.acodec === 'string') {
+    return format.acodec !== 'none';
+  }
+
+  return Boolean(format.audio_ext && format.audio_ext !== 'none');
+}
+
+function getFormatHeight(format = {}) {
+  const numericHeight = Number(format.height);
+  if (Number.isFinite(numericHeight)) {
+    return numericHeight;
+  }
+
+  const resolution = String(format.resolution || '');
+  const match = resolution.match(/(\d+)x(\d+)/);
+  return match ? Number(match[2]) : 0;
+}
+
+function normalizeFormat(format = {}) {
+  return {
+    format_id: format.format_id,
+    ext: format.ext || null,
+    quality: format.format_note || format.format || null,
+    resolution: format.resolution || (
+      format.width && format.height ? `${format.width}x${format.height}` : null
+    ),
+    width: format.width || null,
+    height: format.height || null,
+    protocol: format.protocol || null,
+    hasVideo: hasVideo(format),
+    hasAudio: hasAudio(format),
+    isDirect: !isManifestFormat(format),
+    url: format.url || null
+  };
+}
+
+function chooseBestVideo(formats = []) {
+  const candidates = formats.filter((format) => (
+    format.url &&
+    hasVideo(format)
+  ));
+
+  candidates.sort((left, right) => {
+    const leftDirect = Number(!isManifestFormat(left));
+    const rightDirect = Number(!isManifestFormat(right));
+    if (leftDirect !== rightDirect) return rightDirect - leftDirect;
+
+    const leftMuxed = Number(hasAudio(left));
+    const rightMuxed = Number(hasAudio(right));
+    if (leftMuxed !== rightMuxed) return rightMuxed - leftMuxed;
+
+    const leftMp4 = Number(String(left.ext || '').toLowerCase() === 'mp4');
+    const rightMp4 = Number(String(right.ext || '').toLowerCase() === 'mp4');
+    if (leftMp4 !== rightMp4) return rightMp4 - leftMp4;
+
+    const leftHeight = getFormatHeight(left);
+    const rightHeight = getFormatHeight(right);
+    if (leftHeight !== rightHeight) return rightHeight - leftHeight;
+
+    return (right.tbr || 0) - (left.tbr || 0);
+  });
+
+  return candidates[0] || null;
+}
+
+function classifyInfoError(stderr = '') {
+  const message = stderr.toLowerCase();
+
+  if (message.includes('drm')) {
+    return {
+      status: 422,
+      code: 'DRM_PROTECTED',
+      error: 'This content is DRM-protected and cannot be resolved.'
+    };
+  }
+
+  if (
+    message.includes('private video') ||
+    message.includes('private') ||
+    message.includes('login required') ||
+    message.includes('sign in') ||
+    message.includes('members only') ||
+    message.includes('password')
+  ) {
+    return {
+      status: 422,
+      code: 'LOGIN_OR_PRIVATE',
+      error: 'This content is private or requires login.'
+    };
+  }
+
+  if (
+    message.includes('geo') ||
+    message.includes('not available in your country') ||
+    message.includes('blocked in your country')
+  ) {
+    return {
+      status: 422,
+      code: 'GEO_BLOCKED',
+      error: 'This content is geo-blocked.'
+    };
+  }
+
+  return {
+    status: 500,
+    code: 'INFO_FETCH_FAILED',
+    error: 'Failed to fetch media info.'
+  };
+}
 
 // Home route
 app.get("/", (req, res) => {
@@ -35,29 +194,58 @@ app.get("/info", (req, res) => {
     const url = req.query.url;
     if (!url) return res.status(400).json({ error: "URL required" });
 
-    const cmd = `yt-dlp "${url}" --dump-single-json --no-warnings --no-check-certificates --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" --add-header "accept-language:en-US,en;q=0.9" --add-header "referer:https://www.instagram.com/" --extractor-args "instagram:api_version=v1;dailymotion:impersonate=false"`;
+    const urlPattern = /^https?:\/\/.+/i;
+    if (!urlPattern.test(url)) {
+      return res.status(400).json({ error: 'Invalid URL format. Please provide a valid HTTP/HTTPS URL.' });
+    }
 
-    exec(cmd, { maxBuffer: 1024 * 5000 }, (err, stdout, stderr) => {
-        if (err) {
-            return res.status(500).json({ error: "Failed to fetch info", details: stderr });
-        }
-        try {
-            const data = JSON.parse(stdout);
-            res.json({
-                title: data.title,
-                thumbnail: data.thumbnail,
-                duration: data.duration,
-                formats: data.formats
-                    ?.filter(f => f.ext === "mp4")
-                    .map(f => ({
-                        format_id: f.format_id,
-                        quality: f.format_note,
-                        url: f.url
-                    }))
-            });
-        } catch (e) {
-            res.status(500).json({ error: "Failed to parse info" });
-        }
+    const args = buildInfoArgs(url);
+    const ytdlp = spawn('yt-dlp', args);
+    let stdout = '';
+    let stderr = '';
+
+    ytdlp.stdout.on('data', (data) => {
+      stdout += data.toString();
+    });
+
+    ytdlp.stderr.on('data', (data) => {
+      stderr += data.toString();
+    });
+
+    ytdlp.on('close', (code) => {
+      if (code !== 0) {
+        const errorResponse = classifyInfoError(stderr);
+        return res.status(errorResponse.status).json({
+          error: errorResponse.error,
+          code: errorResponse.code,
+          details: stderr.trim() || null
+        });
+      }
+
+      try {
+        const data = JSON.parse(stdout);
+        const formats = Array.isArray(data.formats) ? data.formats : [];
+        const bestVideo = chooseBestVideo(formats);
+        const normalizedFormats = formats
+          .filter((format) => format.url && (hasVideo(format) || hasAudio(format)))
+          .map(normalizeFormat);
+
+        res.json({
+          title: data.title || null,
+          thumbnail: data.thumbnail || null,
+          duration: data.duration || null,
+          extractor: data.extractor || null,
+          webpage_url: data.webpage_url || url,
+          bestVideoUrl: bestVideo?.url || null,
+          bestVideoFormatId: bestVideo?.format_id || null,
+          formats: normalizedFormats
+        });
+      } catch (error) {
+        res.status(500).json({
+          error: 'Failed to parse info',
+          code: 'INFO_PARSE_FAILED'
+        });
+      }
     });
 });
 
@@ -81,7 +269,7 @@ downloadRouter.post('/', async (req, res) => {
 
     // Build yt-dlp command
     const args = [];
-    args.push('--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
+    args.push('--user-agent', DEFAULT_USER_AGENT);
     args.push('--add-header', 'Accept-Language:en-US,en;q=0.9');
 
     if (audioOnly) {
