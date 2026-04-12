@@ -26,26 +26,46 @@ const DEFAULT_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKi
 // Ensure downloads directory exists
 fs.ensureDirSync(downloadsDir);
 
+function appendSharedYtDlpArgs(args, url) {
+  args.push('--user-agent', DEFAULT_USER_AGENT);
+  args.push('--add-header', 'Accept-Language:en-US,en;q=0.9');
+
+  try {
+    const { hostname } = new URL(url);
+    const normalizedHostname = hostname.replace(/^www\./i, '').toLowerCase();
+    const extractorArgs = [];
+
+    if (normalizedHostname === 'instagram.com' || normalizedHostname.endsWith('.instagram.com')) {
+      args.push('--add-header', 'Referer:https://www.instagram.com/');
+      extractorArgs.push('instagram:api_version=v1');
+    }
+
+    if (
+      normalizedHostname === 'dailymotion.com' ||
+      normalizedHostname.endsWith('.dailymotion.com') ||
+      normalizedHostname === 'dai.ly'
+    ) {
+      extractorArgs.push('generic:impersonate=false');
+      extractorArgs.push('dailymotion:impersonate=false');
+    }
+
+    if (extractorArgs.length > 0) {
+      args.push('--extractor-args', extractorArgs.join(';'));
+    }
+  } catch (error) {
+    // URL validation happens before this helper is called.
+  }
+}
+
 function buildInfoArgs(url) {
   const args = [
     url,
     '--dump-single-json',
     '--no-warnings',
-    '--no-check-certificates',
-    '--user-agent', DEFAULT_USER_AGENT,
-    '--add-header', 'accept-language:en-US,en;q=0.9'
+    '--no-check-certificates'
   ];
 
-  try {
-    const { hostname } = new URL(url);
-    if (hostname.includes('instagram.com')) {
-      args.push('--add-header', 'referer:https://www.instagram.com/');
-      args.push('--extractor-args', 'instagram:api_version=v1;dailymotion:impersonate=false');
-    }
-  } catch (error) {
-    // URL validation happens before this helper is called.
-  }
-
+  appendSharedYtDlpArgs(args, url);
   return args;
 }
 
@@ -147,6 +167,18 @@ function classifyInfoError(stderr = '') {
       status: 422,
       code: 'DRM_PROTECTED',
       error: 'This content is DRM-protected and cannot be resolved.'
+    };
+  }
+
+  if (
+    message.includes('impersonation') ||
+    message.includes('impersonate targets are available') ||
+    message.includes('curl_cffi')
+  ) {
+    return {
+      status: 503,
+      code: 'IMPERSONATION_DEPENDENCY_MISSING',
+      error: 'This source currently needs browser impersonation support on the server.'
     };
   }
 
@@ -269,8 +301,7 @@ downloadRouter.post('/', async (req, res) => {
 
     // Build yt-dlp command
     const args = [];
-    args.push('--user-agent', DEFAULT_USER_AGENT);
-    args.push('--add-header', 'Accept-Language:en-US,en;q=0.9');
+    appendSharedYtDlpArgs(args, url);
 
     if (audioOnly) {
       args.push('-f', 'bestaudio/best');

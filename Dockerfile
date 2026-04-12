@@ -8,9 +8,8 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# 🔥 Fix: Use --break-system-packages for modern Debian/Ubuntu
-# Also updated to latest yt-dlp to avoid extraction errors
-RUN pip3 install --no-cache-dir -U yt-dlp --break-system-packages
+# Install yt-dlp with curl_cffi so browser impersonation targets are available
+RUN pip3 install --no-cache-dir -U "yt-dlp[default,curl-cffi]" --break-system-packages
 
 ENV PATH="/usr/local/bin:/usr/bin:${PATH}"
 
